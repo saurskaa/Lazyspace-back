@@ -1,0 +1,25 @@
+export enum WsMessage {
+    // system
+    PING = "PING",
+    PONG = "PONG",
+    ERROR = "ERROR",
+  
+    // matchmaking
+
+    LEAVE_QUEUE = "LEAVE_QUEUE",
+
+    JOIN_QUEUE = "JOIN_QUEUE",
+    MATCH_FOUND = "MATCH_FOUND",
+  
+    PEER_RECONNECTING = "PEER_RECONNECTING",
+    PEER_RECONNECTED = "PEER_RECONNECTED",
+  
+    END_CONVERSATION = "END_CONVERSATION",
+    FIND_ANOTHER_MATCH = "FIND_ANOTHER_MATCH",
+  
+    // chat
+    CHAT_MESSAGE = "CHAT_MESSAGE",
+    PEER_DISCONNECTED = "PEER_DISCONNECTED",
+    END_CHAT = "END_CHAT"
+  }
+  
