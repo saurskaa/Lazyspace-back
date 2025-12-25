@@ -14,7 +14,7 @@ import {
   endConversation
 } from "../state/conversationStore";
 
-const WAIT_MS = 2 * 60 * 1000; 
+const WAIT_MS = 2 * 60 * 1000;
 
 export function handleMessage(connectionId: string, raw: string) {
   const ws = getConnection(connectionId);
@@ -39,27 +39,27 @@ export function handleMessage(connectionId: string, raw: string) {
 
     case WsMessage.JOIN_QUEUE: {
       const partnerId = joinQueue(connectionId);
-      
+
       if (!partnerId) {
         return;
       }
-      
+
       const user = getConnectionInfo(connectionId);
       const partner = getConnectionInfo(partnerId);
 
-    if(!partner || !user) return;
+      if (!partner || !user) return;
 
       if (partnerId) {
         const partnerWs = getConnection(partnerId);
 
         user.ws.send(JSON.stringify({
           type: WsMessage.MATCH_FOUND,
-          payload: { partnerName : partner.username }
+          payload: { partnerName: partner.username }
         }));
 
         partner.ws.send(JSON.stringify({
           type: WsMessage.MATCH_FOUND,
-          payload: { partnerName : user.username}
+          payload: { partnerName: user.username }
         }));
       }
       break;
@@ -69,42 +69,59 @@ export function handleMessage(connectionId: string, raw: string) {
       leaveQueue(connectionId);
       break;
 
-      case WsMessage.END_CHAT: {
-        // treat as intentional disconnect
-        handleDisconnect(connectionId);
-        break;
-      }
-      
+    case WsMessage.END_CHAT: {
+      // treat as intentional disconnect
+      handleDisconnect(connectionId);
+      break;
+    }
 
-      case WsMessage.FIND_ANOTHER_MATCH:
-        findAnotherMatch(connectionId);
-        break;
 
-      case WsMessage.CHAT_MESSAGE: {
-        const partnerId = getPartner(connectionId);
-        if (!partnerId) return;
-      
-        const partnerWs = getConnection(partnerId);
-        const senderWs = getConnection(connectionId);
-      
-        const chatMsg = JSON.stringify({
-          type: WsMessage.CHAT_MESSAGE,
-          payload: {
-            message: msg.payload.message,
-            from: connectionId   // 🔥 IMPORTANT
-          }
-        });
-      
-        // send to partner
-        partnerWs?.send(chatMsg);
-      
-        // echo back to sender
-        senderWs?.send(chatMsg);
-      
-        break;
-      }
-      
+    case WsMessage.FIND_ANOTHER_MATCH:
+      findAnotherMatch(connectionId);
+      break;
 
+    case WsMessage.CHAT_MESSAGE: {
+      const partnerId = getPartner(connectionId);
+      if (!partnerId) return;
+
+      const partnerWs = getConnection(partnerId);
+      const senderWs = getConnection(connectionId);
+
+      const chatMsg = JSON.stringify({
+        type: WsMessage.CHAT_MESSAGE,
+        payload: {
+          message: msg.payload.message,
+          from: connectionId   // 🔥 IMPORTANT
+        }
+      });
+
+      // send to partner
+      partnerWs?.send(chatMsg);
+
+      // echo back to sender
+      senderWs?.send(chatMsg);
+
+      break;
+    }
+
+    case WsMessage.TYPING_START:
+    case WsMessage.TYPING_STOP: {
+      const partnerId = getPartner(connectionId);
+      if (!partnerId) return;
+
+      const partnerWs = getConnection(partnerId);
+      if (!partnerWs) return;
+
+      partnerWs.send(JSON.stringify({
+        type: msg.type,
+        payload: {
+          from: connectionId
+        }
+      }));
+      break;
+    }
+
+    
     default:
       ws.send(JSON.stringify({
         type: WsMessage.ERROR,
@@ -154,9 +171,9 @@ export function findAnotherMatch(userId: string) {
   }
 }
 
-export function sendPeerDisconnectMessage(connectionId: string) : string  {
+export function sendPeerDisconnectMessage(connectionId: string): string {
   // leaveQueue(connectionId);
-  
+
   if (connectionId) {
     const partnerWs = getConnection(connectionId);
     partnerWs?.send(JSON.stringify({

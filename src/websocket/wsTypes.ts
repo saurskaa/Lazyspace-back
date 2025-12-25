@@ -20,6 +20,8 @@ export enum WsMessage {
     // chat
     CHAT_MESSAGE = "CHAT_MESSAGE",
     PEER_DISCONNECTED = "PEER_DISCONNECTED",
+    TYPING_START = "TYPING_START",
+    TYPING_STOP = "TYPING_STOP",
     END_CHAT = "END_CHAT"
   }
   
