@@ -1,5 +1,6 @@
 import { WsMessage } from "./wsTypes";
 import { getConnection } from "../state/connectionStore";
+import { randomUUID } from "crypto";
 import {
   joinQueue,
   leaveQueue,
@@ -71,8 +72,11 @@ export function handleMessage(connectionId: string, raw: string) {
       const chatMsg = JSON.stringify({
         type: WsMessage.CHAT_MESSAGE,
         payload: {
+          id : randomUUID(),
           message: msg.payload.message,
-          from: connectionId   // 🔥 IMPORTANT
+          from: connectionId,   // 🔥 IMPORTANT
+          replyTo: msg.payload.replyTo ?? null,
+          createdAt: Date.now()
         }
       });
 
