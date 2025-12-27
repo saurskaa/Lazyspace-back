@@ -1,52 +1,76 @@
-type UserId = string;
-
-interface Conversation {
-  userA: UserId;
-  userB: UserId;
-  reconnectTimer?: NodeJS.Timeout;
-}
+import { randomUUID } from "crypto";
+export type Conversation = {
+  id: string;
+  users: [string, string];
+};
 
 const conversations = new Map<string, Conversation>();
-const userToConversation = new Map<UserId, string>();
+const userToConversation = new Map<string, string>();
+const reconnectTimers = new Map<string, NodeJS.Timeout>();
 
-export function createConversation(a: UserId, b: UserId) {
-  const id = crypto.randomUUID();
-  conversations.set(id, { userA: a, userB: b });
-  userToConversation.set(a, id);
-  userToConversation.set(b, id);
-  return id;
+export function createConversation(u1: string, u2: string) {
+  const id = randomUUID();
+  const convo = { id, users: [u1, u2] as [string, string] };
+
+  conversations.set(id, convo);
+  userToConversation.set(u1, id);
+  userToConversation.set(u2, id);
+  console.log(`new converstation created ${id}`);
+  return convo;
 }
 
-export function getConversationId(userId: UserId) {
-  return userToConversation.get(userId);
-}
-
-export function getOtherUser(convoId: string, userId: UserId) {
-  const c = conversations.get(convoId);
-  if (!c) return undefined;
-  return c.userA === userId ? c.userB : c.userA;
-}
-
-export function setReconnectTimer(
-  convoId: string,
-  timer: NodeJS.Timeout
-) {
-  const c = conversations.get(convoId);
-  if (c) c.reconnectTimer = timer;
-}
-
-export function clearReconnectTimer(convoId: string) {
-  const c = conversations.get(convoId);
-  if (c?.reconnectTimer) {
-    clearTimeout(c.reconnectTimer);
-    delete c.reconnectTimer;
-  }
+export function getConversationByUser(userId: string) {
+  const convoId = userToConversation.get(userId);
+  if (!convoId) return null;
+  return conversations.get(convoId) ?? null;
 }
 
 export function endConversation(convoId: string) {
-  const c = conversations.get(convoId);
-  if (!c) return;
-  userToConversation.delete(c.userA);
-  userToConversation.delete(c.userB);
+  const convo = conversations.get(convoId);
+  if (!convo) return;
+
   conversations.delete(convoId);
+  userToConversation.delete(convo.users[0]);
+  userToConversation.delete(convo.users[1]);
+  console.log(` converstation died ${convoId}`);
+}
+
+export function startReconnectTimer(
+  userId: string,
+  onExpire: () => void,
+  delayMs = 90_000
+) {
+  clearReconnectTimer(userId);
+
+  const timer = setTimeout(() => {
+    reconnectTimers.delete(userId);
+    onExpire();
+  }, delayMs);
+
+  reconnectTimers.set(userId, timer);
+}
+
+export function clearReconnectTimer(userId: string) {
+  const timer = reconnectTimers.get(userId);
+  if (timer) {
+    clearTimeout(timer);
+    reconnectTimers.delete(userId);
+  }
+}
+
+export function isValidConversation(userId : string, convoIdtoValidate: string) : boolean{
+  const convo = conversations.get(convoIdtoValidate);
+  if (!convo || (!convo.users.includes(userId))) {
+    return false;
+  }
+  const potentialConvoUser = getConversationByUser(userId);
+  const potentialConvoPartner = getConversationByUser(convo.users.find(u => u!== userId)!);
+  if(potentialConvoPartner?.id !== potentialConvoUser?.id) return false;
+
+  return true;
+}
+
+export function getPartnerId(userId : string) : string{
+  const convo = getConversationByUser(userId);
+  return convo?.users.find(u => u !== userId)!;
 }

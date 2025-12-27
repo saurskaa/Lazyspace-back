@@ -1,9 +1,11 @@
+import { Conversation,createConversation } from "./conversationStore";
 type ConnectionId = string;
 
 const waitingQueue: ConnectionId[] = [];
 const activeMatches = new Map<ConnectionId, ConnectionId>();
 
-export function joinQueue(id: ConnectionId): ConnectionId | null {
+
+export function joinQueue(id: ConnectionId): Conversation | null {
   if (activeMatches.has(id) || waitingQueue.includes(id)) {
     return null;
   }
@@ -12,7 +14,7 @@ export function joinQueue(id: ConnectionId): ConnectionId | null {
     const partner = waitingQueue.shift()!;
     activeMatches.set(id, partner);
     activeMatches.set(partner, id);
-    return partner;
+    return createConversation(id, partner);
   }
 
   waitingQueue.push(id);

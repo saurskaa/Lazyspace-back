@@ -2,12 +2,12 @@ import { WebSocketServer } from "ws";
 import { handleMessage, handleDisconnect } from "./wsHandlers";
 import { addConnection, getConnection } from "../state/connectionStore";
 import {
-  getConversationId,
-  getOtherUser,
   clearReconnectTimer
 } from "../state/conversationStore";
 import { WsMessage } from "./wsTypes";
 import { IncomingMessage } from "http";
+import { getConversationByUser } from "../state/conversationStore";
+import { handleAmbigousDisconnect } from "./wsHandlers";
 
 
 export function createWebSocketServer(server: any) {
@@ -26,21 +26,28 @@ export function createWebSocketServer(server: any) {
     /* 1️⃣ Register connection */
     addConnection(userId, username, ws);
 
-    /* 2️⃣ Handle possible reconnect */
-    // const convoId = getConversationId(userId);
-    // console.log("convoId " + convoId)
-    // if (convoId) {
-    //   // User reconnected within grace period
-    //   clearReconnectTimer(convoId);
-
-    //   const otherUserId = getOtherUser(convoId, userId);
-    //   if (otherUserId) {
-    //     const otherWs = getConnection(otherUserId);
-    //     otherWs?.send(JSON.stringify({
-    //       type: WsMessage.PEER_RECONNECTED
-    //     }));
-    //   }
-    // }
+    const convo = getConversationByUser(userId);
+    if (convo) {
+      // 🔥 User reconnected within grace period
+      clearReconnectTimer(userId);
+  
+      const partnerId = convo.users.find(u => u !== userId)!;
+      const partnerWs = getConnection(partnerId);
+  
+      partnerWs?.send(JSON.stringify({
+        type: WsMessage.PEER_RECONNECTED
+      }));
+  
+      ws.send(JSON.stringify({
+        type: WsMessage.RESUME_CONVERSATION,
+        payload: { 
+          partnerId : partnerId,
+          conversationId : convo
+        }
+      }));
+  
+     
+    }
 
     /* 3️⃣ Normal message handling */
     ws.on("message", (data) => {
@@ -49,7 +56,7 @@ export function createWebSocketServer(server: any) {
 
     /* 4️⃣ On socket close → start reconnect wait */
     ws.on("close", () => {
-      handleDisconnect(userId);
+      handleAmbigousDisconnect(userId);
     });
   });
 }
