@@ -1,6 +1,7 @@
 import { WsMessage } from "./wsTypes";
-import { getConnection } from "../state/connectionStore";
+import { getConnection, getConnectionInfo } from "../state/connectionStore";
 import { randomUUID } from "crypto";
+import { AppConstant } from "../constants/AppConstant";
 import {
   joinQueue,
   leaveQueue,
@@ -9,11 +10,9 @@ import {
 } from "../state/matchMakingStore";
 
 import {
-  getConversationByUser,
-  startReconnectTimer,
-  endConversation,
-  isValidConversation,
-  getPartnerId
+  getConversationByUser,startReconnectTimer,endConversation,
+  isValidConversation,getPartnerId,getPrivateConversationByInviteToken,getConversation,
+  createPrivateConversation
 } from "../state/conversationStore";
 
 
@@ -110,6 +109,58 @@ export function handleMessage(connectionId: string, raw: string) {
       break;
     }
 
+    case WsMessage.CREATE_PRIVATE_CONVERSATION: {
+    const userWs = getConnection(connectionId);
+    const privateConvo = createPrivateConversation(connectionId);
+     if(!privateConvo || !userWs) return;
+  
+      userWs.send( JSON.stringify({
+        type: WsMessage.PRIVATE_LINK_CREATED,
+        payload: {
+          inviteLink: `${AppConstant.FRONTEND_URL}/chat?invite=${privateConvo.inviteToken}`,
+          conversationId : privateConvo.id
+        }
+      }));
+      break;
+    }
+
+    case WsMessage.JOIN_PRIVATE_CONVERSATION: {
+      const { inviteToken } = msg.payload;
+      const userConnection = getConnectionInfo(connectionId);
+      const storedConvo = getPrivateConversationByInviteToken(inviteToken);
+    
+      if (!storedConvo || storedConvo.users.length >= 2) {
+        userConnection?.ws.send(JSON.stringify( 
+          { type: WsMessage.INVALID_INVITE }));
+        return;
+      }
+    
+      storedConvo.users.push(connectionId);
+    
+   const partnerId = getPartnerId(connectionId);
+   const partnerConnection = getConnectionInfo(partnerId);
+
+   userConnection?.ws.send(JSON.stringify( {
+        type: WsMessage.MATCH_FOUND,
+        payload: {
+          conversationId : storedConvo.id,
+          partnerName: partnerConnection?.username
+
+
+        }
+      }));
+    
+      partnerConnection?.ws.send(JSON.stringify({
+        type: WsMessage.MATCH_FOUND,
+        payload: {
+          conversationId : storedConvo.id,
+          partnerName: userConnection?.username
+        }
+      }));
+    
+      break;
+    }
+    
     
     default:
       ws.send(JSON.stringify({
@@ -174,11 +225,16 @@ export function handleAmbigousDisconnect(userId : string){
   }));
 
   // Start grace period
-  startReconnectTimer(userId, () => {
-    // Grace period expired → end conversation
-    partnerWs?.send(JSON.stringify({
-      type: WsMessage.PEER_DISCONNECTED
-    }));
+  startReconnectTimer(convo.id, () => {
+    const currentConvo = getConversation(convo.id);
+  if (!currentConvo) return;
+
+  if (!currentConvo.users.includes(partnerId)) return;
+
+  partnerWs?.send(JSON.stringify({
+    type: WsMessage.PEER_DISCONNECTED,
+    payload: { conversationId: convo.id }
+  }));
     endMatch(userId);
     endConversation(convo.id);
   }
@@ -194,22 +250,24 @@ function findMatchAndInform(userId : string){
   const newPartner = newConvoId?.users.find(u => u !== userId)!;
 
   if (newPartner) {
-    const userWs = getConnection(userId);
-    const partnerWs = getConnection(newPartner);
+    const userConnection = getConnectionInfo(userId);
+    const partnerConnection = getConnectionInfo(newPartner);
 
-    userWs?.send(JSON.stringify({
+    userConnection?.ws.send(JSON.stringify({
       type: WsMessage.MATCH_FOUND,
       payload: { 
         partnerId: newPartner,
-        conversationId : newConvoId?.id 
+        conversationId : newConvoId?.id,
+        partnerName :  partnerConnection?.username
       }
     }));
 
-    partnerWs?.send(JSON.stringify({
+    partnerConnection?.ws.send(JSON.stringify({
       type: WsMessage.MATCH_FOUND,
       payload: { 
         partnerId: userId,
-        conversationId : newConvoId?.id 
+        conversationId : newConvoId?.id, 
+        partnerName : userConnection?.username
       }
     }));
   }

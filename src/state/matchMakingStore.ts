@@ -1,4 +1,4 @@
-import { Conversation,createConversation } from "./conversationStore";
+import { Conversation,createConversation} from "./conversationStore";
 type ConnectionId = string;
 
 const waitingQueue: ConnectionId[] = [];
