@@ -10,9 +10,10 @@ import {
 } from "../state/matchMakingStore";
 
 import {
-  getConversationByUser,startReconnectTimer,endConversation,
-  isValidConversation,getPartnerId,getPrivateConversationByInviteToken,getConversation,
-  createPrivateConversation
+  getConversationByUser, startReconnectTimer, endConversation,
+  isValidConversation, getPartnerId, getPrivateConversationByInviteToken, getConversation,
+  createPrivateConversation,
+  Conversation
 } from "../state/conversationStore";
 
 
@@ -71,7 +72,7 @@ export function handleMessage(connectionId: string, raw: string) {
       const chatMsg = JSON.stringify({
         type: WsMessage.CHAT_MESSAGE,
         payload: {
-          id : randomUUID(),
+          id: randomUUID(),
           message: msg.payload.message,
           from: connectionId,   // 🔥 IMPORTANT
           replyTo: msg.payload.replyTo ?? null,
@@ -88,9 +89,9 @@ export function handleMessage(connectionId: string, raw: string) {
       break;
     }
 
-    case WsMessage.REQUEST_RESUME: 
-    handleRequestResume(connectionId,msg.payload.conversationId);
-    break;
+    case WsMessage.REQUEST_RESUME:
+      handleRequestResume(connectionId, msg.payload.conversationId);
+      break;
 
     case WsMessage.TYPING_START:
     case WsMessage.TYPING_STOP: {
@@ -110,15 +111,15 @@ export function handleMessage(connectionId: string, raw: string) {
     }
 
     case WsMessage.CREATE_PRIVATE_CONVERSATION: {
-    const userWs = getConnection(connectionId);
-    const privateConvo = createPrivateConversation(connectionId);
-     if(!privateConvo || !userWs) return;
-  
-      userWs.send( JSON.stringify({
+      const userWs = getConnection(connectionId);
+      const privateConvo = createPrivateConversation(connectionId);
+      if (!privateConvo || !userWs) return;
+
+      userWs.send(JSON.stringify({
         type: WsMessage.PRIVATE_LINK_CREATED,
         payload: {
           inviteLink: `${AppConstant.FRONTEND_URL}/chat?invite=${privateConvo.inviteToken}`,
-          conversationId : privateConvo.id
+          conversationId: privateConvo.id
         }
       }));
       break;
@@ -128,40 +129,40 @@ export function handleMessage(connectionId: string, raw: string) {
       const { inviteToken } = msg.payload;
       const userConnection = getConnectionInfo(connectionId);
       const storedConvo = getPrivateConversationByInviteToken(inviteToken);
-    
+
       if (!storedConvo || storedConvo.users.length >= 2) {
-        userConnection?.ws.send(JSON.stringify( 
+        userConnection?.ws.send(JSON.stringify(
           { type: WsMessage.INVALID_INVITE }));
         return;
       }
-    
-      storedConvo.users.push(connectionId);
-    
-   const partnerId = getPartnerId(connectionId);
-   const partnerConnection = getConnectionInfo(partnerId);
 
-   userConnection?.ws.send(JSON.stringify( {
+      storedConvo.users.push(connectionId);
+
+      const partnerId = getPartnerId(connectionId);
+      const partnerConnection = getConnectionInfo(partnerId);
+
+      userConnection?.ws.send(JSON.stringify({
         type: WsMessage.MATCH_FOUND,
         payload: {
-          conversationId : storedConvo.id,
+          conversationId: storedConvo.id,
           partnerName: partnerConnection?.username
 
 
         }
       }));
-    
+
       partnerConnection?.ws.send(JSON.stringify({
         type: WsMessage.MATCH_FOUND,
         payload: {
-          conversationId : storedConvo.id,
+          conversationId: storedConvo.id,
           partnerName: userConnection?.username
         }
       }));
-    
+
       break;
     }
-    
-    
+
+
     default:
       ws.send(JSON.stringify({
         type: WsMessage.ERROR,
@@ -177,7 +178,7 @@ export function handleDisconnect(connectionId: string) { // intenional
   // End active match (if any)
   const partnerId = endMatch(connectionId);
   const convo = getConversationByUser(connectionId);
-  if(!convo) return;
+  if (!convo) return;
   endConversation(convo.id);
 
   if (!partnerId) return;
@@ -196,7 +197,7 @@ export function findAnotherMatch(userId: string) {
   console.log(`Diconnect called for : ${userId}`);
 
   findMatchAndInform(userId);
- 
+
 }
 
 export function sendPeerDisconnectMessage(connectionId: string): string {
@@ -211,7 +212,7 @@ export function sendPeerDisconnectMessage(connectionId: string): string {
   return connectionId;
 }
 
-export function handleAmbigousDisconnect(userId : string){
+export function handleAmbigousDisconnect(userId: string) {
   leaveQueue(userId);
   const convo = getConversationByUser(userId);
   if (!convo) return;
@@ -227,27 +228,39 @@ export function handleAmbigousDisconnect(userId : string){
   // Start grace period
   startReconnectTimer(convo.id, () => {
     const currentConvo = getConversation(convo.id);
-  if (!currentConvo) return;
+    if (!currentConvo) return;
 
-  if (!currentConvo.users.includes(partnerId)) return;
+    if (!currentConvo.users.includes(partnerId)) return;
 
-  partnerWs?.send(JSON.stringify({
-    type: WsMessage.PEER_DISCONNECTED,
-    payload: { conversationId: convo.id }
-  }));
+    partnerWs?.send(JSON.stringify({
+      type: WsMessage.PEER_DISCONNECTED,
+      payload: { conversationId: convo.id }
+    }));
     endMatch(userId);
     endConversation(convo.id);
   }
-  
-);
+
+  );
 
 
 }
 
 
-function findMatchAndInform(userId : string){
+function findMatchAndInform(userId: string) {
   const newConvoId = joinQueue(userId);
-  const newPartner = newConvoId?.users.find(u => u !== userId)!;
+
+  if (newConvoId && 'error' in newConvoId && newConvoId.error === 'RATE_LIMIT_EXCEEDED') {
+    const userConnection = getConnectionInfo(userId);
+    userConnection?.ws.send(JSON.stringify({
+      type: WsMessage.ERROR_RATE_LIMIT,
+      payload: AppConstant.RATE_LIMIT_PAYLOAD
+    }));
+    return;
+  }
+
+  // At this point newConvoId is either null or a Conversation
+  const convo = newConvoId as Conversation | null;
+  const newPartner = convo?.users.find((u: string) => u !== userId)!;
 
   if (newPartner) {
     const userConnection = getConnectionInfo(userId);
@@ -255,45 +268,45 @@ function findMatchAndInform(userId : string){
 
     userConnection?.ws.send(JSON.stringify({
       type: WsMessage.MATCH_FOUND,
-      payload: { 
+      payload: {
         partnerId: newPartner,
-        conversationId : newConvoId?.id,
-        partnerName :  partnerConnection?.username
+        conversationId: convo?.id,
+        partnerName: partnerConnection?.username
       }
     }));
 
     partnerConnection?.ws.send(JSON.stringify({
       type: WsMessage.MATCH_FOUND,
-      payload: { 
+      payload: {
         partnerId: userId,
-        conversationId : newConvoId?.id, 
-        partnerName : userConnection?.username
+        conversationId: convo?.id,
+        partnerName: userConnection?.username
       }
     }));
   }
 }
 
 
-function handleRequestResume(userId : string, conversationId : string) {
+function handleRequestResume(userId: string, conversationId: string) {
   console.log(`is valid convo : ${isValidConversation(userId, conversationId)}`);
   const userWs = getConnection(userId);
-    if(isValidConversation(userId, conversationId)){
-      userWs?.send(JSON.stringify({
-        type: WsMessage.RESUME_CONVERSATION,
-        payload: { 
-          conversationId : conversationId,
-          partnerName : getPartnerId(userId)
-        }
-      }));
-      return;
-    }
-
+  if (isValidConversation(userId, conversationId)) {
     userWs?.send(JSON.stringify({
-      type: WsMessage.INVALID_CONVERSATION_ID,
-      payload: { 
-        conversationId : conversationId 
+      type: WsMessage.RESUME_CONVERSATION,
+      payload: {
+        conversationId: conversationId,
+        partnerName: getPartnerId(userId)
       }
     }));
+    return;
+  }
 
- 
+  userWs?.send(JSON.stringify({
+    type: WsMessage.INVALID_CONVERSATION_ID,
+    payload: {
+      conversationId: conversationId
+    }
+  }));
+
+
 }

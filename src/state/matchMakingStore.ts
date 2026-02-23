@@ -1,11 +1,17 @@
-import { Conversation,createConversation} from "./conversationStore";
+import { Conversation, createConversation } from "./conversationStore";
+import { canMatch } from "../Util/rateLimiter";
+
 type ConnectionId = string;
 
 const waitingQueue: ConnectionId[] = [];
 const activeMatches = new Map<ConnectionId, ConnectionId>();
 
 
-export function joinQueue(id: ConnectionId): Conversation | null {
+export function joinQueue(id: ConnectionId): Conversation | { error: string } | null {
+  if (!canMatch(id)) {
+    return { error: 'RATE_LIMIT_EXCEEDED' };
+  }
+
   if (activeMatches.has(id) || waitingQueue.includes(id)) {
     return null;
   }
