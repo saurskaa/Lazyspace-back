@@ -16,6 +16,8 @@ import {
   Conversation
 } from "../state/conversationStore";
 
+import { reportUser } from "../state/reportStore";
+
 
 const WAIT_MS = 2 * 60 * 1000;
 
@@ -54,6 +56,14 @@ export function handleMessage(connectionId: string, raw: string) {
     case WsMessage.END_CHAT: {
       // treat as intentional disconnect
       handleDisconnect(connectionId);
+      break;
+    }
+
+    case WsMessage.REPORT_USER: {
+      const partnerId = getPartner(connectionId);
+      if (partnerId) {
+        reportUser(connectionId, partnerId);
+      }
       break;
     }
 

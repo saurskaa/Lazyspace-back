@@ -17,6 +17,7 @@ export function createWebSocketServer(server: any) {
     const url = new URL(req.url!, "http://localhost");
     const userId = url.searchParams.get("userId");
     const username = url.searchParams.get("name") ?? "Someone";
+    const ip = (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || "unknown_ip";
 
     if (!userId) {
       ws.close(1008, "userId required");
@@ -24,29 +25,29 @@ export function createWebSocketServer(server: any) {
     }
 
     /* 1️⃣ Register connection */
-    addConnection(userId, username, ws);
+    addConnection(userId, username, ws, ip);
 
     const convo = getConversationByUser(userId);
     if (convo) {
       // 🔥 User reconnected within grace period
       clearReconnectTimer(userId);
-  
+
       const partnerId = convo.users.find(u => u !== userId)!;
       const partnerWs = getConnection(partnerId);
-  
+
       partnerWs?.send(JSON.stringify({
         type: WsMessage.PEER_RECONNECTED
       }));
-  
+
       ws.send(JSON.stringify({
         type: WsMessage.RESUME_CONVERSATION,
-        payload: { 
-          partnerId : partnerId,
-          conversationId : convo
+        payload: {
+          partnerId: partnerId,
+          conversationId: convo
         }
       }));
-  
-     
+
+
     }
 
     /* 3️⃣ Normal message handling */

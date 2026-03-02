@@ -4,6 +4,7 @@ export interface Connection {
   userId: string;
   username: string;
   ws: WebSocket;
+  ip: string;
 }
 
 const connections = new Map<string, Connection>();
@@ -11,12 +12,14 @@ const connections = new Map<string, Connection>();
 export function addConnection(
   userId: string,
   username: string,
-  ws: WebSocket
+  ws: WebSocket,
+  ip: string
 ) {
   connections.set(userId, {
     userId,
     username,
-    ws
+    ws,
+    ip
   });
 }
 
